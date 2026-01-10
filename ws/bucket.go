@@ -73,11 +73,18 @@ func (b *bucket) sendMsgByClientId(ctx context.Context, clientId string, msg str
 }
 
 func (b *bucket) sendMsgByAll(ctx context.Context, msg string) []string {
-	// 遍历所有连接并发送消息
+	// 创建连接副本，避免在遍历过程中持有锁
 	b.RLock()
-	defer b.RUnlock()
+	// 复制连接信息到临时变量
+	connCopy := make(map[string]*connection)
+	for k, v := range b.connectionMap {
+		connCopy[k] = v
+	}
+	b.RUnlock()
+
 	var failedClientIds []string
-	for clientId, conn := range b.connectionMap {
+	// 遍历副本进行消息发送
+	for clientId, conn := range connCopy {
 		err := conn.conn.WriteMessage(quickws.Text, []byte(msg))
 		if err != nil {
 			g.Log().Errorf(ctx, "failed to send message to clientId %s: %v\n", clientId, err)

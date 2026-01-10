@@ -52,6 +52,10 @@ func (m *ConnManager) addConn(clientId string, groupId string, conn *quickws.Con
 	if groupIdExist {
 		bkt := m.getBucketByGroupId(groupId)
 		bkt.addConnection(clientId, conn)
+		// 更新 clientIndex，记录该客户端所属的组
+		m.Lock()
+		m.clientIndex[clientId] = groupId
+		m.Unlock()
 		return
 	}
 
@@ -71,9 +75,18 @@ func (m *ConnManager) delConn(clientId string) {
 	bkt.delConnection(clientId)
 
 	// 如果是组内连接，需要进一步更新 groups 和 clientIndex 结构
-	if fromGroup && bkt.count() == 0 {
-		m.delGroup(clientId)
+	if fromGroup {
+		m.delClientIndex(clientId)
+		if bkt.count() == 0 {
+			m.delGroup(clientId)
+		}
 	}
+}
+
+func (m *ConnManager) delClientIndex(clientId string) {
+	m.Lock()
+	defer m.Unlock()
+	delete(m.clientIndex, clientId)
 }
 
 func (m *ConnManager) delGroup(clientId string) {
@@ -141,7 +154,7 @@ func (m *ConnManager) getGroupId(clientId string) string {
 }
 
 func (m *ConnManager) SendMsgByClientId(ctx context.Context, clientId string, content string) error {
-	bkt := m.getBucketByIndex(clientId)
+	bkt, _ := m.getBucket(clientId)
 	err := bkt.sendMsgByClientId(ctx, clientId, content)
 	return err
 }
