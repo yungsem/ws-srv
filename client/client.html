@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 客户端测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e1e4e8;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 16px;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel h2 {
+            color: #3498db;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .control-group input, .control-group textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e6ed;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .control-group input:focus, .control-group textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        button i {
+            margin-right: 8px;
+        }
+        
+        .connect-btn {
+            background-color: #2ecc71;
+            color: white;
+        }
+        
+        .connect-btn:hover {
+            background-color: #27ae60;
+        }
+        
+        .disconnect-btn {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .disconnect-btn:hover {
+            background-color: #c0392b;
+        }
+        
+        .send-btn {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .send-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .ping-btn {
+            background-color: #9b59b6;
+            color: white;
+        }
+        
+        .ping-btn:hover {
+            background-color: #8e44ad;
+        }
+        
+        .toggle-btn {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .toggle-btn:hover {
+            background-color: #d68910;
+        }
+        
+        .clear-btn {
+            background-color: #95a5a6;
+            color: white;
+        }
+        
+        .clear-btn:hover {
+            background-color: #7f8c8d;
+        }
+        
+        .status-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .connected {
+            background-color: #2ecc71;
+        }
+        
+        .disconnected {
+            background-color: #e74c3c;
+        }
+        
+        .connecting {
+            background-color: #f39c12;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+        
+        .log-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            border: 2px solid #e0e6ed;
+            border-radius: 6px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            min-height: 300px;
+            max-height: 500px;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #e0e6ed;
+        }
+        
+        .log-time {
+            color: #7f8c8d;
+            font-size: 12px;
+            margin-right: 10px;
+        }
+        
+        .log-message {
+            word-break: break-all;
+        }
+        
+        .log-sent {
+            color: #2980b9;
+        }
+        
+        .log-received {
+            color: #27ae60;
+        }
+        
+        .log-system {
+            color: #e74c3c;
+        }
+        
+        .log-ping {
+            color: #9b59b6;
+        }
+        
+        .log-pong {
+            color: #8e44ad;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-satellite-dish"></i> WebSocket 客户端测试工具</h1>
+            <p class="subtitle">用于测试 WebSocket 服务端连接，支持发送文本消息和 ping 帧</p>
+        </header>
+        
+        <div class="content">
+            <div class="panel">
+                <h2><i class="fas fa-cogs"></i> 连接控制</h2>
+                
+                <div class="control-group">
+                    <label for="ws-url"><i class="fas fa-link"></i> WebSocket 服务端地址</label>
+                    <input type="text" id="ws-url" value="ws://localhost:8484?clientId=test_client_001">
+                </div>
+                
+                <div class="control-group">
+                    <label for="message-input"><i class="fas fa-comment-dots"></i> 发送消息</label>
+                    <textarea id="message-input" rows="4" placeholder="输入要发送的消息...">Hello, WebSocket Server!</textarea>
+                </div>
+                
+                <div class="button-group">
+                    <button id="connect-btn" class="connect-btn">
+                        <i class="fas fa-plug"></i> 连接
+                    </button>
+                    <button id="disconnect-btn" class="disconnect-btn" disabled>
+                        <i class="fas fa-power-off"></i> 断开
+                    </button>
+                    <button id="send-btn" class="send-btn" disabled>
+                        <i class="fas fa-paper-plane"></i> 发送消息
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button id="ping-btn" class="ping-btn" disabled>
+                        <i class="fas fa-satellite"></i> 发送 Ping
+                    </button>
+                    <button id="toggle-ping-btn" class="toggle-btn">
+                        <i class="fas fa-play"></i> 启动自动 Ping
+                    </button>
+                    <button id="clear-log-btn" class="clear-btn">
+                        <i class="fas fa-trash"></i> 清空日志
+                    </button>
+                </div>
+                
+                <div class="status-container">
+                    <div id="status-indicator" class="status-indicator disconnected"></div>
+                    <div id="status-text">未连接</div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2><i class="fas fa-history"></i> 通信日志</h2>
+                <div class="log-container" id="log-container">
+                    <div class="log-entry">
+                        <span class="log-time">等待连接...</span>
+                        <span class="log-message log-system">准备连接到 WebSocket 服务端</span>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h3><i class="fas fa-info-circle"></i> 使用说明</h3>
+                    <ul style="padding-left: 20px; color: #7f8c8d; font-size: 14px; margin-top: 10px;">
+                        <li>修改上方的服务端地址，确保与你的 WebSocket 服务端地址一致</li>
+                        <li>点击"连接"按钮建立 WebSocket 连接</li>
+                        <li>连接成功后，可以发送文本消息或 ping 帧</li>
+                        <li>"自动 Ping"功能会每秒自动发送一个 ping 帧</li>
+                        <li>服务端返回的 pong 帧和其他消息会显示在日志中</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>© 2023 WebSocket 测试工具 | 使用原生 WebSocket API 实现</p>
+        </footer>
+    </div>
+
+    <script>
+        // 全局变量
+        let ws = null;
+        let autoPingInterval = null;
+        let isAutoPingRunning = false;
+        
+        // DOM 元素
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const sendBtn = document.getElementById('send-btn');
+        const pingBtn = document.getElementById('ping-btn');
+        const togglePingBtn = document.getElementById('toggle-ping-btn');
+        const clearLogBtn = document.getElementById('clear-log-btn');
+        const wsUrlInput = document.getElementById('ws-url');
+        const messageInput = document.getElementById('message-input');
+        const logContainer = document.getElementById('log-container');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        
+        // 更新连接状态
+        function updateStatus(status) {
+            statusIndicator.className = 'status-indicator ' + status;
+            
+            if (status === 'connected') {
+                statusText.textContent = '已连接';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = false;
+                pingBtn.disabled = false;
+            } else if (status === 'disconnected') {
+                statusText.textContent = '未连接';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = true;
+                pingBtn.disabled = true;
+                
+                // 停止自动ping
+                stopAutoPing();
+            } else if (status === 'connecting') {
+                statusText.textContent = '连接中...';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = true;
+                pingBtn.disabled = true;
+            }
+        }
+        
+        // 添加日志
+        function addLog(type, message) {
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            
+            let icon = '';
+            let messageClass = '';
+            
+            switch(type) {
+                case 'sent':
+                    icon = '<i class="fas fa-arrow-up"></i> ';
+                    messageClass = 'log-sent';
+                    break;
+                case 'received':
+                    icon = '<i class="fas fa-arrow-down"></i> ';
+                    messageClass = 'log-received';
+                    break;
+                case 'ping':
+                    icon = '<i class="fas fa-satellite"></i> ';
+                    messageClass = 'log-ping';
+                    break;
+                case 'pong':
+                    icon = '<i class="fas fa-satellite-dish"></i> ';
+                    messageClass = 'log-pong';
+                    break;
+                case 'system':
+                    icon = '<i class="fas fa-info-circle"></i> ';
+                    messageClass = 'log-system';
+                    break;
+            }
+            
+            logEntry.innerHTML = `
+                <span class="log-time">${time}</span>
+                <span class="log-message ${messageClass}">${icon}${message}</span>
+            `;
+            
+            logContainer.appendChild(logEntry);
+            
+            // 自动滚动到底部
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // 连接到 WebSocket
+        function connect() {
+            const url = wsUrlInput.value.trim();
+            
+            if (!url) {
+                addLog('system', '错误：请填写 WebSocket 地址');
+                return;
+            }
+            
+            updateStatus('connecting');
+            addLog('system', `正在连接到: ${url}`);
+            
+            try {
+                ws = new WebSocket(url);
+                
+                ws.onopen = function(event) {
+                    addLog('system', '连接已建立');
+                    updateStatus('connected');
+                };
+                
+                ws.onclose = function(event) {
+                    addLog('system', `连接已关闭 (代码: ${event.code}, 原因: ${event.reason || '无'})`);
+                    updateStatus('disconnected');
+                    ws = null;
+                };
+                
+                ws.onerror = function(error) {
+                    addLog('system', '连接发生错误');
+                    updateStatus('disconnected');
+                };
+                
+                ws.onmessage = function(event) {
+                    // 检查是否是 Blob 数据
+                    if (event.data instanceof Blob) {
+                        const reader = new FileReader();
+                        reader.onload = function() {
+                            addLog('received', `收到消息 (二进制): ${reader.result}`);
+                        };
+                        reader.readAsText(event.data);
+                    } else {
+                        addLog('received', `收到消息: ${event.data}`);
+                    }
+                };
+                
+                // 监听 pong 事件
+                ws.addEventListener('pong', function(event) {
+                    addLog('pong', '收到 pong 响应');
+                });
+                
+            } catch (error) {
+                addLog('system', `连接失败: ${error.message}`);
+                updateStatus('disconnected');
+            }
+        }
+        
+        // 断开连接
+        function disconnect() {
+            if (ws) {
+                addLog('system', '正在断开连接...');
+                ws.close(1000, '客户端主动断开');
+            }
+        }
+        
+        // 发送消息
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('system', '错误：未连接到服务器');
+                return;
+            }
+            
+            const message = messageInput.value.trim();
+            
+            if (!message) {
+                addLog('system', '错误：消息不能为空');
+                return;
+            }
+            
+            try {
+                ws.send(message);
+                addLog('sent', `发送消息: ${message}`);
+                messageInput.value = '';
+                messageInput.focus();
+            } catch (error) {
+                addLog('system', `发送失败: ${error.message}`);
+            }
+        }
+        
+        // 发送 ping
+        function sendPing() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('system', '错误：未连接到服务器');
+                return;
+            }
+            
+            try {
+                // 注意：这里使用 WebSocket 的 ping 方法
+                // 但浏览器可能不支持手动发送 ping
+                if (typeof ws.ping === 'function') {
+                    ws.ping();
+                    addLog('ping', '发送 ping 帧');
+                } else {
+                    // 如果不支持 ping 方法，发送一个文本消息作为替代
+                    ws.send('PING');
+                    addLog('ping', '发送文本 PING (浏览器不支持 ping 方法)');
+                }
+            } catch (error) {
+                addLog('system', `发送 ping 失败: ${error.message}`);
+            }
+        }
+        
+        // 切换自动 ping
+        function toggleAutoPing() {
+            if (isAutoPingRunning) {
+                stopAutoPing();
+            } else {
+                startAutoPing();
+            }
+        }
+        
+        // 启动自动 ping
+        function startAutoPing() {
+            if (autoPingInterval) {
+                clearInterval(autoPingInterval);
+            }
+            
+            autoPingInterval = setInterval(function() {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    sendPing();
+                } else {
+                    stopAutoPing();
+                }
+            }, 10000);
+            
+            isAutoPingRunning = true;
+            togglePingBtn.innerHTML = '<i class="fas fa-pause"></i> 停止自动 Ping';
+            togglePingBtn.classList.remove('toggle-btn');
+            togglePingBtn.classList.add('disconnect-btn');
+            addLog('system', '已启动自动 Ping (每10秒1次)');
+        }
+        
+        // 停止自动 ping
+        function stopAutoPing() {
+            if (autoPingInterval) {
+                clearInterval(autoPingInterval);
+                autoPingInterval = null;
+            }
+            
+            isAutoPingRunning = false;
+            togglePingBtn.innerHTML = '<i class="fas fa-play"></i> 启动自动 Ping';
+            togglePingBtn.classList.remove('disconnect-btn');
+            togglePingBtn.classList.add('toggle-btn');
+            addLog('system', '已停止自动 Ping');
+        }
+        
+        // 清空日志
+        function clearLog() {
+            logContainer.innerHTML = '';
+            addLog('system', '日志已清空');
+        }
+        
+        // 键盘快捷键支持
+        document.addEventListener('keydown', function(event) {
+            // Ctrl+Enter 或 Cmd+Enter 发送消息
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                sendMessage();
+            }
+            
+            // Esc 清空输入框
+            if (event.key === 'Escape') {
+                messageInput.value = '';
+                messageInput.focus();
+            }
+        });
+        
+        // 事件监听
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        sendBtn.addEventListener('click', sendMessage);
+        pingBtn.addEventListener('click', sendPing);
+        togglePingBtn.addEventListener('click', toggleAutoPing);
+        clearLogBtn.addEventListener('click', clearLog);
+        
+        // 在输入框按 Enter 发送消息
+        messageInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // 页面加载时初始化
+        updateStatus('disconnected');
+        
+        // 添加一些初始说明
+        addLog('system', 'WebSocket 客户端已准备就绪');
+        addLog('system', '1. 请确保服务端地址正确（默认: ws://localhost:8080/ws?clientId=test_client_001）');
+        addLog('system', '2. 点击"连接"按钮连接到 WebSocket 服务端');
+        addLog('system', '3. 连接成功后，可以发送消息或 ping 帧');
+        addLog('system', '4. 使用 Ctrl+Enter 快捷键可以快速发送消息');
+    </script>
+</body>
+</html>
