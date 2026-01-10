@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/antlabs/quickws"
 )
@@ -18,6 +19,8 @@ type ConnManager struct {
 	// groups 管理的连接索引，key: clientId, value: groupId
 	clientIndex map[string]string
 	count       int
+	// 读写锁，用于保护 groups 和 clientIndex 的并发访问
+	sync.RWMutex
 }
 
 func NewConnManager(count int) *ConnManager {
@@ -31,68 +34,59 @@ func NewConnManager(count int) *ConnManager {
 	}
 
 	return &ConnManager{
-		buckets: buckets,
-		count:   count,
+		buckets:     buckets,
+		groups:      make(map[string]*bucket),
+		clientIndex: make(map[string]string),
+		count:       count,
 	}
 }
 
-func (m *ConnManager) AddGroupConnection(groupId string, clientId string, conn *quickws.Conn) {
-	if m.groups == nil {
-		m.groups = make(map[string]*bucket)
-		m.clientIndex = make(map[string]string)
-	} else if m.existGroup(groupId) {
-		bkt := m.groups[groupId]
+func (m *ConnManager) addConn(clientId string, groupId string, conn *quickws.Conn) {
+	if groupId == "" {
+		bkt := m.getBucketByIndex(clientId)
 		bkt.addConnection(clientId, conn)
-		m.clientIndex[clientId] = groupId
 		return
 	}
 
+	groupIdExist := m.isGroupIdExist(groupId)
+	if groupIdExist {
+		bkt := m.getBucketByGroupId(groupId)
+		bkt.addConnection(clientId, conn)
+		return
+	}
+
+	m.Lock()
 	bkt := newBucket()
 	bkt.addConnection(clientId, conn)
 	m.groups[groupId] = bkt
 	m.clientIndex[clientId] = groupId
-}
-
-func (m *ConnManager) existGroup(groupId string) bool {
-	if _, ok := m.groups[groupId]; ok {
-		return true
-	}
-	return false
-}
-
-func (m *ConnManager) getBucketIndex(clientId string) uint32 {
-	// 这里使用简单的FNV-1a算法
-	var h uint32 = 2166136261
-	for i := 0; i < len(clientId); i++ {
-		h ^= uint32(clientId[i])
-		h *= 16777619
-	}
-	return h % uint32(m.count)
-}
-
-func (m *ConnManager) getBucket(clientId string) (*bucket, bool) {
-	// 检查该连接是否属于某个 group
-	if groupId, ok := m.clientIndex[clientId]; ok {
-		return m.getBucketByGroupId(groupId), true
-	}
-	// 否则使用内置的 bucket
-	index := m.getBucketIndex(clientId)
-	return m.buckets[index], false
-}
-
-func (m *ConnManager) getBucketByGroupId(groupId string) *bucket {
-	return m.groups[groupId]
+	m.Unlock()
 }
 
 func (m *ConnManager) delConn(clientId string) {
-	bkt, isGroup := m.getBucket(clientId)
+
+	// 先读取 client 所属的 bucket 和组信息
+	bkt, fromGroup := m.getBucket(clientId)
+	// 从 bucket 中删除连接
 	bkt.delConnection(clientId)
-	if isGroup {
-		if bkt.count() == 0 {
-			delete(m.groups, m.clientIndex[clientId])
-		}
-		delete(m.clientIndex, clientId)
+
+	// 如果是组内连接，需要进一步更新 groups 和 clientIndex 结构
+	if fromGroup && bkt.count() == 0 {
+		m.delGroup(clientId)
 	}
+}
+
+func (m *ConnManager) delGroup(clientId string) {
+	// 写锁：需要修改 groups 和 clientIndex 数据结构
+	m.Lock()
+	defer m.Unlock()
+
+	// 如果该组的连接数已为 0，删除整个组
+	if groupId, ok := m.clientIndex[clientId]; ok {
+		delete(m.groups, groupId)
+	}
+	// 从 clientIndex 中删除该客户端
+	delete(m.clientIndex, clientId)
 }
 
 func (m *ConnManager) getConn(clientId string) (*connection, error) {
@@ -100,19 +94,67 @@ func (m *ConnManager) getConn(clientId string) (*connection, error) {
 	return bkt.getConnection(clientId)
 }
 
-func (m *ConnManager) addConn(clientId string, conn *quickws.Conn) {
-	bkt, _ := m.getBucket(clientId)
-	bkt.addConnection(clientId, conn)
+func (m *ConnManager) getBucketByIndex(clientId string) *bucket {
+	// 这里使用简单的FNV-1a算法
+	var h uint32 = 2166136261
+	for i := 0; i < len(clientId); i++ {
+		h ^= uint32(clientId[i])
+		h *= 16777619
+	}
+	idx := h % uint32(m.count)
+
+	m.RLock()
+	defer m.RUnlock()
+	return m.buckets[idx]
+}
+
+func (m *ConnManager) getBucketByGroupId(groupId string) *bucket {
+	m.RLock()
+	defer m.RUnlock()
+	return m.groups[groupId]
+}
+
+func (m *ConnManager) getBucket(clientId string) (*bucket, bool) {
+	groupId := m.getGroupId(clientId)
+	if groupId != "" {
+		return m.getBucketByGroupId(groupId), true
+	}
+	return m.getBucketByIndex(clientId), false
+}
+
+func (m *ConnManager) isGroupIdExist(groupId string) bool {
+	m.RLock()
+	defer m.RUnlock()
+	if _, ok := m.groups[groupId]; ok {
+		return true
+	}
+	return false
+}
+
+func (m *ConnManager) getGroupId(clientId string) string {
+	m.RLock()
+	defer m.RUnlock()
+	if groupId, ok := m.clientIndex[clientId]; ok {
+		return groupId
+	}
+	return ""
 }
 
 func (m *ConnManager) SendMsgByClientId(ctx context.Context, clientId string, content string) error {
-	bkt, _ := m.getBucket(clientId)
+	bkt := m.getBucketByIndex(clientId)
 	err := bkt.sendMsgByClientId(ctx, clientId, content)
 	return err
 }
 
 func (m *ConnManager) SendMsgByGroupId(ctx context.Context, groupId string, content string) []string {
+	// 读锁：查询 groups 结构，获取对应组的 bucket
 	bkt := m.getBucketByGroupId(groupId)
+
+	// 如果组不存在，返回 nil
+	if bkt == nil {
+		return nil
+	}
+
 	failedClientIds := bkt.sendMsgByAll(ctx, content)
 	return failedClientIds
 }
@@ -139,10 +181,14 @@ func (m *ConnManager) Total() (int, int, int) {
 		bktTotal += bkt.count()
 	}
 
+	// 读锁：遍历 groups 结构
+	m.RLock()
 	groupTotal := 0
 	for _, bkt := range m.groups {
 		groupTotal += bkt.count()
 	}
+	m.RUnlock()
+
 	return bktTotal, groupTotal, bktTotal + groupTotal
 }
 
@@ -154,10 +200,13 @@ func (m *ConnManager) Summary() map[string]any {
 	sm["bucket_total"] = bktTotal
 	sm["group_total"] = groupTotal
 
+	// 读锁：遍历 groups 结构获取组详细信息
+	m.RLock()
 	groupMap := make(map[string]int)
 	for groupId, bkt := range m.groups {
 		groupMap[fmt.Sprintf("%s", groupId)] = bkt.count()
 	}
+	m.RUnlock()
 
 	bktMap := make(map[string]int)
 	for i, bkt := range m.buckets {

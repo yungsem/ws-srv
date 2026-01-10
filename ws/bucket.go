@@ -45,6 +45,16 @@ func (b *bucket) delConnection(clientId string) {
 	delete(b.connectionMap, clientId)
 }
 
+func (b *bucket) getConnection(clientId string) (*connection, error) {
+	b.RLock()
+	defer b.RUnlock()
+	conn, ok := b.connectionMap[clientId]
+	if !ok {
+		return nil, fmt.Errorf("connection not found, clientId: %s", clientId)
+	}
+	return conn, nil
+}
+
 func (b *bucket) sendMsgByClientId(ctx context.Context, clientId string, msg string) error {
 	conn, err := b.getConnection(clientId)
 	if err != nil {
@@ -78,16 +88,6 @@ func (b *bucket) sendMsgByAll(ctx context.Context, msg string) []string {
 	}
 
 	return failedClientIds
-}
-
-func (b *bucket) getConnection(clientId string) (*connection, error) {
-	b.RLock()
-	defer b.RUnlock()
-	conn, ok := b.connectionMap[clientId]
-	if !ok {
-		return nil, fmt.Errorf("connection not found, clientId: %s", clientId)
-	}
-	return conn, nil
 }
 
 func (b *bucket) count() int {
