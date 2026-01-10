@@ -24,11 +24,7 @@ func NewWebSocketHandler(ctx context.Context, clientId string, groupId string, c
 }
 
 func (w *WebSocketHandler) OnOpen(c *quickws.Conn) {
-	if w.GroupId != "" {
-		w.connManager.AddGroupConnection(w.GroupId, w.ClientId, c)
-	} else {
-		w.connManager.addConn(w.ClientId, c)
-	}
+	w.connManager.addConn(w.ClientId, w.GroupId, c)
 	g.Log().Infof(w.ctx, "WebSocket OnOpen, clientId:%s\n", w.ClientId)
 }
 
