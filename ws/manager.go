@@ -68,7 +68,6 @@ func (m *ConnManager) addConn(clientId string, groupId string, conn *quickws.Con
 }
 
 func (m *ConnManager) delConn(clientId string) {
-
 	// 先读取 client 所属的 bucket 和组信息
 	bkt, fromGroup := m.getBucket(clientId)
 	// 从 bucket 中删除连接
@@ -98,8 +97,6 @@ func (m *ConnManager) delGroup(clientId string) {
 	if groupId, ok := m.clientIndex[clientId]; ok {
 		delete(m.groups, groupId)
 	}
-	// 从 clientIndex 中删除该客户端
-	delete(m.clientIndex, clientId)
 }
 
 func (m *ConnManager) getConn(clientId string) (*connection, error) {
