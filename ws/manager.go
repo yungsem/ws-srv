@@ -77,7 +77,7 @@ func (m *ConnManager) delConn(clientId string) {
 	if fromGroup {
 		m.delClientIndex(clientId)
 		if bkt.count() == 0 {
-			m.delGroup(clientId)
+			m.delGroup()
 		}
 	}
 }
@@ -88,15 +88,11 @@ func (m *ConnManager) delClientIndex(clientId string) {
 	delete(m.clientIndex, clientId)
 }
 
-func (m *ConnManager) delGroup(clientId string) {
+func (m *ConnManager) delGroup(groupId string) {
 	// 写锁：需要修改 groups 和 clientIndex 数据结构
 	m.Lock()
 	defer m.Unlock()
-
-	// 如果该组的连接数已为 0，删除整个组
-	if groupId, ok := m.clientIndex[clientId]; ok {
-		delete(m.groups, groupId)
-	}
+	delete(m.groups, groupId)
 }
 
 func (m *ConnManager) getConn(clientId string) (*connection, error) {
