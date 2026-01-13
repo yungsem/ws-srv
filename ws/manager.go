@@ -69,15 +69,15 @@ func (m *ConnManager) addConn(clientId string, groupId string, conn *quickws.Con
 
 func (m *ConnManager) delConn(clientId string) {
 	// 先读取 client 所属的 bucket 和组信息
-	bkt, fromGroup := m.getBucket(clientId)
+	bkt, groupId := m.getBucket(clientId)
 	// 从 bucket 中删除连接
 	bkt.delConnection(clientId)
 
 	// 如果是组内连接，需要进一步更新 groups 和 clientIndex 结构
-	if fromGroup {
+	if groupId != "" {
 		m.delClientIndex(clientId)
 		if bkt.count() == 0 {
-			m.delGroup()
+			m.delGroup(groupId)
 		}
 	}
 }
@@ -120,12 +120,12 @@ func (m *ConnManager) getBucketByGroupId(groupId string) *bucket {
 	return m.groups[groupId]
 }
 
-func (m *ConnManager) getBucket(clientId string) (*bucket, bool) {
+func (m *ConnManager) getBucket(clientId string) (*bucket, string) {
 	groupId := m.getGroupId(clientId)
 	if groupId != "" {
-		return m.getBucketByGroupId(groupId), true
+		return m.getBucketByGroupId(groupId), groupId
 	}
-	return m.getBucketByIndex(clientId), false
+	return m.getBucketByIndex(clientId), ""
 }
 
 func (m *ConnManager) isGroupIdExist(groupId string) bool {
